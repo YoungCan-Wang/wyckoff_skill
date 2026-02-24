@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wyckoff 联网分析"
+  short_description: "按北京时间交易规则，联网多源抓数后先做威科夫分析再绘图。"
+  default_prompt: "输入股票代码后联网抓取并切换数据源，按固定威科夫系统提示词先分析后绘图，盘中时段跳过绘图。"
