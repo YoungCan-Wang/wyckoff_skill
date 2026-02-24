@@ -9,7 +9,7 @@ Use this skill for a strict sequence:
 
 1. User provides stock codes and/or CSV and optional chart image.
 2. Agent fetches market data online with source fallback and normalizes OHLCV.
-3. Agent applies fixed Wyckoff system prompt from `references/alpha-system-prompt.md`.
+3. Agent applies fixed Wyckoff system prompt from `rules/alpha-system-prompt.md`.
 4. Agent outputs analysis first, then plotting code/results.
 
 ## Required Execution Order
@@ -30,7 +30,7 @@ Use this skill for a strict sequence:
 - Do not output immediate intraday execution commands.
 
 4. Fetch data with online source switching:
-- Use `references/source-fallbacks.md` order.
+- Use `rules/source-fallbacks.md` order.
 - For each symbol, keep source audit log.
 - If source fails or columns incomplete, switch source.
 
@@ -52,6 +52,5 @@ Use this skill for a strict sequence:
 
 ## Resources
 
-- `references/alpha-system-prompt.md`: fixed role and hard rules.
-- `references/source-fallbacks.md`: online source switching policy.
-- `scripts/normalize_ohlcv_csv.py`: normalize fetched CSV to standard OHLCV columns.
+- `rules/alpha-system-prompt.md`: fixed role and hard rules.
+- `rules/source-fallbacks.md`: online source switching policy.
