@@ -49,6 +49,8 @@ Use this skill for a strict sequence:
 - Do not fabricate missing OHLCV rows.
 - Do not ignore image input if image is parseable.
 - Do not use opaque white text boxes in chart annotations.
+- If fetching data requires running Python scripts, run them only in a sandboxed environment.
+- Prefer direct web/API fetch first; use Python scripts only when needed for fallback, parsing, or normalization.
 
 ## Resources
 
