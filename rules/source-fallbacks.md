@@ -1,70 +1,45 @@
-# Source Fallbacks (Online Fetch)
+# Source Fallbacks（仅通道 D）
 
-Use this order for each symbol:
+**只在以下情况使用本文件：** agent 的 MCP / CLI 都不可用；或标的是港股 / 美股单股（agent 单股工具只覆盖 A 股）；
+或用户明确要求用公开网页数据交叉核对。agent 可用时，A 股行情一律走 `analyze_stock(mode="price")`，不要绕过它。
 
-1. Eastmoney / Akshare public endpoints (preferred)
-- Reason: stable A-share coverage and daily bars.
+## 网页源顺序
 
-2. Sina Finance historical endpoints
-- Reason: good backup for daily K data.
+A 股：
+1. 东方财富 / AkShare 公开接口（首选，A 股日线覆盖稳定）
+2. 新浪财经历史接口
+3. 腾讯行情 / 历史接口
+4. 交易所或大型门户里可机器读取的历史表格
 
-3. Tencent quote/history endpoints
-- Reason: useful fallback when above sources fail.
+港股 / 美股：
+1. 东方财富港美股行情页
+2. 新浪 / 腾讯港美股历史接口
+3. 其他可机器读取的权威行情页
 
-4. Other reputable financial pages with machine-readable tables
-- Example: exchange pages or major portal historical data tables.
+## 代码规范化
 
-## Symbol Normalization
+- A 股：`600000.SH`、`000001.SZ`、`430047.BJ`
+- 港股：`00700.HK`；美股：`AAPL.US`
+- 原始输入另存为 `symbol_input`，查询和审计都用规范化后的代码。
 
-Before fetching:
-- Normalize symbol to market-qualified format when possible (for example, `600000.SH`, `000001.SZ`).
-- Preserve the original user input in output as `symbol_input`.
-- Use normalized symbol for source queries and audit logging.
+## 完整性校验
 
-## Query Guidance
+合格的数据集必须满足：
+- 有等价于 `date, open, high, low, close, volume` 的列；
+- 至少 30 行日线（目标 320 行，与 agent 单股读盘窗口一致）；
+- 日期可解析，规范化后无重复日期；
+- 数值列去掉逗号和单位后可解析。
 
-For each symbol, use at least one query pattern:
-- `<symbol> A股 日线 OHLCV 历史`
-- `<symbol> Eastmoney 历史行情`
-- `<symbol> 新浪 财经 K线`
+任一不满足就立即换下一个源。
 
-## Completeness Checks
+## 清洗
 
-A valid symbol dataset must satisfy:
-- Has columns equivalent to `date, open, high, low, close, volume`.
-- Has at least 30 daily rows (target 60).
-- Date sequence is parseable.
-- No duplicate dates after normalization.
-- Numeric columns are parseable after stripping commas/units if needed.
+- 按 `date` 升序，重复日期保留最完整的一行，只保留规范列。
+- 清洗后的行数记为 `rows_kept`。
 
-If checks fail, switch source immediately.
+## 审计
 
-## Column Mapping Rules
+每个标的记录：`symbol_input`、`symbol_normalized`、`source_used`（如 `web:eastmoney`）、`rows_kept`、`window_end_date`、`fallback_count`。
 
-Map source-specific columns into canonical schema:
-- `date`
-- `open`
-- `high`
-- `low`
-- `close`
-- `volume`
-
-If a source cannot be safely mapped to this schema, treat it as failed and fallback.
-
-## Post-Merge Hygiene
-
-After selecting final source:
-- Sort by `date` ascending.
-- Deduplicate by `date` (keep the most complete row).
-- Keep only canonical OHLCV columns for downstream analysis.
-- Record final row count after cleaning as `rows_kept`.
-
-## Audit Requirement
-
-Track for each symbol:
-- `symbol_input`
-- `symbol_normalized`
-- `source_used`
-- `rows_kept`
-- `window_end_date`
-- `fallback_count`
+通道 D 的结论在输出里必须注明：数据来自公开网页，未经过 agent 的数据层、程序诊断字段和市场闸门；
+市场闸门一栏写「未评估（通道 D）」，因此不得给出新开仓或加仓指令，只给结构解读和观察条件。

@@ -1,4 +1,4 @@
 interface:
   display_name: "Wyckoff Trading Agent"
-  short_description: "一键安装 CLI → 注册 → 配置数据源 → 威科夫量价分析 → 持仓管理 → 信号推荐，全链路自动编排。"
-  default_prompt: "检测本地 wyckoff CLI 环境，缺失则引导安装和配置；就绪后按威科夫系统提示词执行完整能力链路：获取北京时间判定交易时段，多源抓数与回退，融合 CSV/图片/组合输入，输出可审计的加仓/减仓/持有/退出/换仓建议；也可直接执行持仓查看、信号查询、推荐查询等 CLI 操作命令。"
+  short_description: "WyckoffTradingAgent 的外部前端：优先调 agent 的 MCP/CLI 工具读盘、管持仓、查信号，严格遵守市场闸门与证据契约。"
+  default_prompt: "检测 wyckoff MCP 工具或 CLI 是否可用，缺失则引导安装、登录、配置数据源与模型。就绪后按意图路由：运维类请求（持仓、信号、形态复盘、筛选、回测、研报）直接调用对应工具；分析类请求先取北京时间判定交易时段，再用 market_regime 过市场闸门，用 analyze_stock / wyckoff_diagnose 取数与结构，按 HOLD/TRIM/EXIT/PROBE 证据契约给出可审计的结论。agent 不可用或标的是港美股时才回退到网页取数，并标明未经过市场闸门。"

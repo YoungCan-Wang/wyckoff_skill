@@ -1,207 +1,116 @@
-# CLI Setup Guide
+# 安装与配置指南
 
-## Installation
+命令参考见 `rules/agent-interface.md`，这里只讲首次上手与排障。
 
-Recommended:
+## 引导顺序
+
+每一步都依赖上一步，不要跳步。MCP 一步是可选的，执行前先问用户。
+
+1. 安装 CLI
+2. 注册并登录
+3. 配置数据源（至少一个）
+4. 配置模型
+5. （可选）注册 MCP Server
+6. 就绪：`wyckoff` 进 TUI、`wyckoff run "..."` 跑无界面任务，或在宿主里直接调 MCP 工具
+
+## 1. 安装
+
+任选一种：
+
 ```bash
-pip install youngcan-wyckoff-analysis
+# 一键安装（建 ~/.wyckoff/venv，自动装 uv）
+curl -fsSL https://raw.githubusercontent.com/YoungCan-Wang/WyckoffTradingAgent/main/install.sh | bash
+
+# Homebrew
+brew tap YoungCan-Wang/wyckoff && brew install wyckoff
+
+# 已有 Python 3.11+ 环境
+uv pip install youngcan-wyckoff-analysis
 ```
 
-Alternative (one-line):
-```bash
-curl -fsSL https://raw.githubusercontent.com/YoungCan-Wang/Wyckoff-Analysis/main/install.sh | bash
-```
+验证：`wyckoff --version`。升级：`wyckoff update`。
 
-Verify: `wyckoff --version`
+不想用命令行的用户可以装桌面端：GitHub Releases 里 `desktop-v*` 标签下有 macOS（Intel / Apple Silicon）安装包。
 
-## Account Registration
+## 2. 注册与登录
 
-1. Open https://wyckoff-analysis.pages.dev/
-2. Register with email and password.
-3. Login via CLI:
+1. 打开 https://wyckoff-analysis.pages.dev/ 注册。
+2. 让用户自己在终端执行（宿主是 Claude Code 时用 `!` 前缀）：
    ```bash
-   wyckoff auth login <email> <password>
+   wyckoff auth <email>
    ```
-4. Verify: `wyckoff auth status`
+   密码交互输入。不要把密码写进命令参数，也不要让用户把密码发到对话里。
+3. 验证：`wyckoff auth status`，看到 `✓ 已登录` 即可。显示「登录已过期」时重新执行第 2 步。
 
-Note: Credentials are automatically saved to `~/.wyckoff/wyckoff.json`. When the login token expires, the CLI will re-login automatically — no need to enter credentials again.
+凭据保存在 `~/.wyckoff/`，token 过期会自动续登。宿主模型不得读取或复述这个目录下的任何内容。
 
-## Data Sources
+## 3. 数据源
 
-At least one data source is required. Both recommended for best coverage.
+至少配一个，两个都配覆盖更好。值省略时会交互输入：
 
-### Tushare (free)
-
-1. Register at https://tushare.pro/ and copy your token.
-2. Configure:
-   ```bash
-   wyckoff config tushare <your_token>
-   ```
-
-### TickFlow (paid, real-time + historical)
-
-1. Purchase at https://tickflow.org/auth/register?ref=5N4NKTCPL4
-2. Copy your API key from the dashboard.
-3. Configure:
-   ```bash
-   wyckoff config tickflow <your_api_key>
-   ```
-
-## AI Model Setup
-
-Interactive:
 ```bash
-wyckoff model add
+wyckoff config tushare      # 免费：https://tushare.pro/ 注册后复制 token
+wyckoff config tickflow     # 付费，实时 + 历史，A / 港 / 美：https://tickflow.org/auth/register?ref=5N4NKTCPL4
+wyckoff config              # 查看脱敏后的当前配置
 ```
 
-Non-interactive:
+## 4. 模型
+
 ```bash
-wyckoff model set <alias> <provider> <api_key> --model <model_name>
+wyckoff model add                                              # 交互
+wyckoff model set <id> <provider> <api_key> --model <name>     # 非交互
+wyckoff model list
 ```
 
-Supported providers: `gemini`, `openai`, `claude`.
+供应商：`gemini`、`openai`、`claude`、`deepseek`。DeepSeek 可加 `--thinking-level off|low|high|max`。
+自建代理用 `--base-url`。只有 `wyckoff run`、`report`、TUI 以及 MCP 的 `generate_ai_report` / `generate_strategy_decision`
+会消耗这里配置的模型额度；其余 MCP 工具不调 LLM。
 
-## MCP Server (Optional)
+## 5. MCP Server（可选）
 
-The Wyckoff MCP Server exposes 14 analysis tools via the [MCP protocol](https://modelcontextprotocol.io/), enabling Claude Code / Cursor / any MCP client to call them directly.
-
-### Install and Register
+先问用户要不要接。要的话：
 
 ```bash
-pip install "youngcan-wyckoff-analysis[mcp]"
+# Claude Code（不依赖本机已装的 CLI）
+claude mcp add wyckoff -- uvx --from 'youngcan-wyckoff-analysis[mcp]>=0.9.454' wyckoff-mcp
+
+# 已用 install.sh 装过 CLI（且 ≥ 0.9.454）的，也可以直接用本机命令
 claude mcp add wyckoff -- wyckoff-mcp
 ```
 
-### Manual MCP Client Config
-
-For non-Claude MCP clients, add to your MCP config file:
+其他客户端（命令和参数分开填）：
 
 ```json
 {
   "mcpServers": {
     "wyckoff": {
-      "command": "wyckoff-mcp",
-      "env": {
-        "TUSHARE_TOKEN": "<your_token>",
-        "TICKFLOW_API_KEY": "<your_key>"
-      }
+      "command": "uvx",
+      "args": ["--from", "youngcan-wyckoff-analysis[mcp]>=0.9.454", "wyckoff-mcp"]
     }
   }
 }
 ```
 
-Note: If `wyckoff login` and `wyckoff config` have already been run, the MCP server reads credentials from `wyckoff.json` automatically — env vars are optional.
+- 不需要在 env 里放 token：0.9.454 起，MCP 进程第一次业务调用时会读本机 CLI 登录态，并把 `wyckoff config` 里的数据源 token
+  写进自身环境（env 里已有的值优先）。版本下限不要省，`uvx` 可能复用缓存里的旧版本。
+- 持仓写入默认拒绝。用户明确要无人值守写入时，才在 `env` 里加 `"WYCKOFF_MCP_ALLOW_WRITES": "1"`；这代表用户接受风险，不是审批。
+- 这是单用户的本地 stdio 进程，不能暴露成多人共享的 HTTP 服务。
+- 注册后要重启宿主会话，工具才会出现。
 
-### Available MCP Tools (14)
+## 排障
 
-| Tool | Description |
+| 现象 | 原因与处理 |
 |---|---|
-| `search_stock_by_name` | Fuzzy search by name / ticker / pinyin |
-| `diagnose_stock` | Single stock Wyckoff diagnosis |
-| `diagnose_portfolio` | Batch portfolio health scan |
-| `get_portfolio` | View holdings and cash |
-| `update_portfolio` | Add / remove / update positions |
-| `get_stock_price` | Recent OHLCV data |
-| `get_market_overview` | Market indices overview |
-| `screen_stocks` | Five-layer funnel screening |
-| `run_backtest` | Historical backtest |
-| `generate_ai_report` | Three-camp AI report |
-| `generate_strategy_decision` | Hold/exit + new buy decisions |
-| `get_recommendation_tracking` | Historical recommendation tracking |
-| `get_signal_pending` | Signal confirmation pool |
-| `get_tail_buy_history` | Tail-buy strategy history |
-
-## CLI Command Reference
-
-### Auth
-
-| Command | Description |
-|---|---|
-| `wyckoff auth login <email> <password>` | Login |
-| `wyckoff auth logout` | Logout |
-| `wyckoff auth status` | Check login status |
-
-### Model
-
-| Command | Description |
-|---|---|
-| `wyckoff model list` | List configured models |
-| `wyckoff model add` | Add model (interactive) |
-| `wyckoff model set <name> <provider> <api_key>` | Add/update model (non-interactive) |
-| `wyckoff model rm <name>` | Remove model |
-| `wyckoff model default <name>` | Set default model |
-
-### Config
-
-| Command | Description |
-|---|---|
-| `wyckoff config show` | Show current config (masked) |
-| `wyckoff config tushare <token>` | Set Tushare token |
-| `wyckoff config tickflow <api_key>` | Set TickFlow API key |
-
-### Portfolio
-
-| Command | Description |
-|---|---|
-| `wyckoff portfolio list` | View positions and cash |
-| `wyckoff portfolio add <code> <shares> <cost>` | Add/update a position |
-| `wyckoff portfolio rm <code>` | Remove a position |
-| `wyckoff portfolio cash <amount>` | Set available cash |
-
-### Signal
-
-| Command | Description |
-|---|---|
-| `wyckoff signal` | View today's triggered signals |
-| `wyckoff signal pending` | Pending signals only |
-| `wyckoff signal confirmed` | Confirmed signals only |
-| `wyckoff signal --json` | JSON output |
-| `wyckoff signal -n 50` | Limit results |
-
-### Recommend
-
-| Command | Description |
-|---|---|
-| `wyckoff recommend` | View today's AI recommendations |
-| `wyckoff recommend --json` | JSON output |
-| `wyckoff recommend -n 10` | Limit results |
-
-### Analysis
-
-| Command | Description |
-|---|---|
-| `wyckoff screen` | Five-layer funnel market screening |
-| `wyckoff backtest <code>` | Strategy historical backtest |
-| `wyckoff report <codes>` | AI deep research report (comma-separated) |
-| `wyckoff dashboard` | Launch local Streamlit visualization panel |
-
-### Data & Maintenance
-
-| Command | Description |
-|---|---|
-| `wyckoff log` | View conversation logs |
-| `wyckoff memory` | Agent memory management |
-| `wyckoff sync` | Sync Supabase → local SQLite |
-| `wyckoff cleanup` | Clean up expired local data |
-
-### Misc
-
-| Command | Description |
-|---|---|
-| `wyckoff update` | Upgrade to latest version |
-| `wyckoff --version` | Print version |
-| `wyckoff` | Launch interactive TUI |
-
-## Guided Setup Flow
-
-When guiding a new user, follow this exact order:
-
-1. **Install** → `curl -fsSL https://raw.githubusercontent.com/YoungCan-Wang/Wyckoff-Analysis/main/install.sh | bash`
-2. **Register** → open web app to create account
-3. **Login** → `wyckoff auth login`
-4. **Data source** → configure at least tushare or tickflow
-5. **Model** → `wyckoff model add`
-6. **MCP (optional)** → ask user if they want MCP integration; if yes → `pip install "youngcan-wyckoff-analysis[mcp]" && claude mcp add wyckoff -- wyckoff-mcp`
-7. **Ready** → user can now run `wyckoff` for TUI, use any CLI subcommand, or invoke tools via MCP
-
-Each step depends on the previous one. Do not skip ahead. Step 6 is optional — always ask before proceeding.
+| `bad interpreter: ~/.wyckoff/venv/bin/python: no such file or directory` | venv 指向的 uv 托管 Python 被清理了。重跑 install.sh，会自动挪走坏 venv 并重建。用的是旧版 install.sh（不会重建）时，先 `mv ~/.wyckoff/venv ~/.wyckoff/venv.broken` 再跑 |
+| `Using SOCKS proxy, but the 'socksio' package is not installed` | 版本低于 0.9.454。CLI：`wyckoff update`；MCP：注册命令带上 `>=0.9.454` |
+| MCP 行情工具报 `tushare=token_missing；tickflow=unconfigured`，但 `wyckoff config` 显示已配置 | MCP 是 0.9.454 之前的版本，不读本机数据源 token。按第 5 步带版本下限重新注册；不能升级时在 MCP 的 env 里显式传 `TUSHARE_TOKEN` / `TICKFLOW_API_KEY` |
+| MCP `portfolio` 返回的持仓和 `wyckoff portfolio list` 不一致 | 0.9.454 之前的 MCP 在 SOCKS 代理下读云端失败会静默回退本地 DB。升级到 ≥ 0.9.454 |
+| `wyckoff auth status` 先打印一段 `SyncGoTrueClient.__del__ ... _refresh_token_timer` 异常 | supabase 库析构时的噪音，看最后一行的登录结果即可 |
+| `wyckoff: error: unrecognized arguments` / `invalid choice` | 命令写法过期，跑 `wyckoff <子命令> --help`，对照 agent-interface 第三节 |
+| `✗ 未知配置项: show` | 没有 `config show`，用 `wyckoff config` |
+| 登录报「邮箱或密码错误」，但确认密码没错 | 多半写成了 `auth login <email>`，`login` 被当成邮箱。改用 `wyckoff auth <email>` |
+| `portfolio cash 50000` 后余额没变 | 金额要写成 `--amount 50000` |
+| MCP 返回 `WRITE_DENIED` | 预期行为，见上方第 5 步 |
+| MCP 返回 `MISSING_DEPENDENCY` | 装的不是 `[mcp]` extra，或业务依赖缺失；用 uvx 那条命令重新注册 |
+| 行情或模型调用失败 | MCP `diagnose_backend()`，或检查 `wyckoff config` / `wyckoff model list` |
+| `wyckoff run` 说「已提交 N 项待批准」 | 写操作在审批队列里，`wyckoff approve list` 查看，`ok <id>` 批准；12 小时后过期 |
