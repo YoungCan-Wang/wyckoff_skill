@@ -34,8 +34,8 @@ description: Wyckoff trading-agent front end for WyckoffTradingAgent (PyPI young
      brew tap YoungCan-Wang/wyckoff && brew install wyckoff
      uv pip install youngcan-wyckoff-analysis
      ```
-   - 报 `bad interpreter: ~/.wyckoff/venv/bin/python` → venv 指向的 uv 托管 Python 被清掉了。install.sh 遇到已存在的 venv 只会原地升级、不会重建，所以要先 `mv ~/.wyckoff/venv ~/.wyckoff/venv.broken` 再跑 install.sh（`wyckoff.json`、`wyckoff.db` 不在 venv 里，不受影响）。
-   - 环境里有 `ALL_PROXY=socks5://...` 时，还要补装 `uv pip install --python ~/.wyckoff/venv/bin/python socksio`，否则所有走 Supabase 的命令（如 `portfolio list`）都会报 `'socksio' package is not installed`。
+   - 报 `bad interpreter: ~/.wyckoff/venv/bin/python` → venv 指向的 uv 托管 Python 被清掉了。重跑上面的 install.sh，它会自动把坏 venv 挪到 `venv.broken-<时间戳>` 并重建（`wyckoff.json`、`wyckoff.db` 不在 venv 里，不受影响）。
+   - 报 `'socksio' package is not installed`（环境里有 `ALL_PROXY=socks5://...`）→ 版本低于 0.9.454，执行 `wyckoff update` 即可。
 2. **登录**：`wyckoff auth status`
    - 未登录 → 先到 https://wyckoff-analysis.pages.dev/ 注册，再让用户**自己**执行 `! wyckoff auth <email>`（不带密码，交互输入，避免密码进 shell 历史和对话记录）。**不要写成 `auth login <email>`**：`login` 会被当成邮箱。
 3. **数据源**：`wyckoff config`（不带参数，打印脱敏配置；**没有 `config show` 子命令**）
@@ -45,13 +45,11 @@ description: Wyckoff trading-agent front end for WyckoffTradingAgent (PyPI young
    - 为空 → `wyckoff model add`（交互）。供应商：gemini / openai / claude / deepseek。
 5. **MCP（可选，先问用户）**：
    ```bash
-   claude mcp add wyckoff \
-     -e TUSHARE_TOKEN=<tushare_token> -e TICKFLOW_API_KEY=<tickflow_key> \
-     -- uvx --from 'youngcan-wyckoff-analysis[mcp]' --with socksio wyckoff-mcp
+   claude mcp add wyckoff -- uvx --from 'youngcan-wyckoff-analysis[mcp]>=0.9.454' wyckoff-mcp
    ```
-   - **数据源 token 必须放进 env**：已登录用户的 MCP 进程只查云端凭据，不读本机 `wyckoff.json`，不传 token 时
-     `analyze_stock` / `wyckoff_diagnose` 会报 `tushare=token_missing；tickflow=unconfigured`。token 让用户自己填，宿主不读配置文件。
-   - `--with socksio` 用于 SOCKS 代理环境；缺了它，`portfolio` 读云端失败后会**静默回退到本地 DB**，返回的可能是旧持仓。
+   - 0.9.454 起，MCP 首次业务调用会读本机 CLI 登录态和 `wyckoff config` 里的数据源 token，不用再在 env 里传。
+   - 版本下限不要省：`uvx` 可能复用本机缓存的旧版本。旧版 MCP 读不到本机 token（报 `tushare=token_missing`），
+     在 SOCKS 代理下 `portfolio` 还会静默回退本地 DB，处理办法见 `rules/cli-setup-guide.md` 的排障表。
    - 注册后需重启会话才会出现工具。持仓写入默认拒绝，见 `rules/agent-interface.md` 的「写入闸门」。
 
 全部通过后输出一行就绪摘要，再进入用户的实际请求。完整安装说明见 `rules/cli-setup-guide.md`。
@@ -137,6 +135,6 @@ description: Wyckoff trading-agent front end for WyckoffTradingAgent (PyPI young
 
 ## 版本对齐
 
-本 skill 对齐 WyckoffTradingAgent `c3146a7b`（2026-10-16，PyPI 0.9.453）。如果命令报
+本 skill 对齐 WyckoffTradingAgent `341c30c5`（2026-10-16，PyPI 0.9.454）。如果命令报
 `unrecognized arguments`、`invalid choice` 或 MCP 报 `UNKNOWN_TOOL`，说明 agent 又迭代了：先跑
 `wyckoff <子命令> --help` 或重新列 MCP 工具，以实际输出为准，并提醒用户更新本 skill。

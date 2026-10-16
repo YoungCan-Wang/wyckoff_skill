@@ -1,5 +1,5 @@
 <!--
-同步来源：WyckoffTradingAgent core/prompts.py::WYCKOFF_SINGLE_SYSTEM_PROMPT（c3146a7b，2026-10-16）。
+同步来源：WyckoffTradingAgent core/prompts.py::WYCKOFF_SINGLE_SYSTEM_PROMPT（341c30c5，2026-10-16；该提示词自 c3146a7b 起未变）。
 下方 `---` 之后的正文保持与 agent 逐字一致，不要在 skill 侧单独改写；agent 改了就整段重新同步。
 
 在本 skill 里的使用方式：
