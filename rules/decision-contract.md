@@ -40,6 +40,10 @@
 - `candidate_theme`、`candidate_phase`、`candidate_role`、`candidate_lane`、`health`、`track` 这些程序字段只能原样引用，
   不得改判或编造。
 - 主线标签只提高比较优先级，不能覆盖硬止损、确认破位、过热风险、数据质量门槛和市场闸门。
+- 引用信号池、形态复盘时先看日期：`query_history` 返回的 `signal_date`、`days_elapsed`、`ttl_days` 和每条记录自带的 `regime`。
+  硬防守期间漏斗不再产出新信号，池子里最新的 `confirmed` 可能是几周前的。超出 `ttl_days` 的记录只能当历史，不能说成「今天的确认信号」。
+- 同一只股票的 `analyze_stock`（如 `health=危险`、`diagnosis_brief.status=avoid`）和 `wyckoff_diagnose`（如 `stage=Accum_B`）
+  可能看起来不一致：后者 `stage_semantics=diagnostic_only`，只描述结构位置，不给动作。决策以 `analyze_stock` 的 `diagnosis_brief` 和止损状态为准。
 
 ## 3. 动作词表与证据门槛
 

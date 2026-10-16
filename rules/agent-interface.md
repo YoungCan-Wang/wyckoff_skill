@@ -23,7 +23,7 @@
 | `screen_stocks` | `board="all"`, `limit=null`, `financial_metrics=null` | 选股漏斗。`limit` 留空=聊天快扫，`0`=全量；最长 600 秒 |
 | `run_funnel_simulation` | `board="all"`, `limit=null` | 跑生产漏斗返回结构数据，不推送通知 |
 | `run_backtest` | `start`, `end`, `hold_days=10`, `top_n=3`, `board="all"`, `stop_loss_pct=-7`, `take_profit_pct=18`, `entry_price_mode="open"`（open / close / tail_1455） | 回测生产漏斗，3–10 分钟 |
-| `portfolio` | `mode="view"`（view / diagnose） | 读取或诊断当前本地用户持仓，需要登录态 |
+| `portfolio` | `mode="view"`（view / diagnose） | 读取或诊断当前本地用户持仓，需要登录态。云端读取失败时会静默回退本地 DB，留意 `valuation_updated_at` 是否陈旧 |
 | `reassess_profile` | `report_text`, `profile="balanced"`（conservative / balanced / aggressive） | 按风格重评已有研报，只预览不落库 |
 | `diagnose_backend` | — | 检查数据源与模型后端连通性 |
 

@@ -72,10 +72,9 @@ wyckoff model list
 
 ```bash
 # Claude Code（不依赖本机已装的 CLI）
-claude mcp add wyckoff -- uvx --from 'youngcan-wyckoff-analysis[mcp]' wyckoff-mcp
-
-# 已经用 install.sh 装过 CLI 的，也可以直接用本机命令
-claude mcp add wyckoff -- wyckoff-mcp
+claude mcp add wyckoff \
+  -e TUSHARE_TOKEN=<tushare_token> -e TICKFLOW_API_KEY=<tickflow_key> \
+  -- uvx --from 'youngcan-wyckoff-analysis[mcp]' --with socksio wyckoff-mcp
 ```
 
 其他客户端（命令和参数分开填）：
@@ -85,13 +84,21 @@ claude mcp add wyckoff -- wyckoff-mcp
   "mcpServers": {
     "wyckoff": {
       "command": "uvx",
-      "args": ["--from", "youngcan-wyckoff-analysis[mcp]", "wyckoff-mcp"]
+      "args": ["--from", "youngcan-wyckoff-analysis[mcp]", "--with", "socksio", "wyckoff-mcp"],
+      "env": {
+        "TUSHARE_TOKEN": "<tushare_token>",
+        "TICKFLOW_API_KEY": "<tickflow_key>"
+      }
     }
   }
 }
 ```
 
-- 不需要在 env 里放 token：完成第 2、3 步后，MCP server 第一次被业务调用时会读本机 CLI 登录态和配置。
+- **登录态会自动继承，数据源 token 不会**：MCP 进程第一次业务调用时读取本机 CLI 登录态；但已登录用户的凭据只查云端，
+  不回退到本机 `wyckoff.json`。云端没存 token 时，行情类工具报 `tushare=token_missing；tickflow=unconfigured`，所以要在 env 里显式传入。
+  token 由用户自己填写，宿主模型不读取配置文件代填。
+- `--with socksio`：环境里有 SOCKS 代理（`ALL_PROXY=socks5://...`）时必需。缺了它，`portfolio` 读云端失败后会静默回退到本地 DB，
+  返回的可能是旧持仓；没有 SOCKS 代理时加上也没有副作用。
 - 持仓写入默认拒绝。用户明确要无人值守写入时，才在 `env` 里加 `"WYCKOFF_MCP_ALLOW_WRITES": "1"`；这代表用户接受风险，不是审批。
 - 这是单用户的本地 stdio 进程，不能暴露成多人共享的 HTTP 服务。
 - 注册后要重启宿主会话，工具才会出现。
@@ -100,7 +107,10 @@ claude mcp add wyckoff -- wyckoff-mcp
 
 | 现象 | 原因与处理 |
 |---|---|
-| `bad interpreter: ~/.wyckoff/venv/bin/python: no such file or directory` | venv 指向的 uv 托管 Python 被清理了。重跑 install.sh 重建 venv |
+| `bad interpreter: ~/.wyckoff/venv/bin/python: no such file or directory` | venv 指向的 uv 托管 Python 被清理了。install.sh 遇到已有 venv 不会重建，先 `mv ~/.wyckoff/venv ~/.wyckoff/venv.broken` 再跑 install.sh |
+| `Using SOCKS proxy, but the 'socksio' package is not installed` | 环境里有 SOCKS 代理，包没声明 `httpx[socks]`。CLI：`uv pip install --python ~/.wyckoff/venv/bin/python socksio`；MCP：注册命令加 `--with socksio` |
+| MCP 行情工具报 `tushare=token_missing；tickflow=unconfigured`，但 `wyckoff config` 显示已配置 | MCP 不读本机 `wyckoff.json` 里的数据源 token，按第 5 步把 token 放进 env |
+| `wyckoff auth status` 先打印一段 `SyncGoTrueClient.__del__ ... _refresh_token_timer` 异常 | supabase 库析构时的噪音，看最后一行的登录结果即可 |
 | `wyckoff: error: unrecognized arguments` / `invalid choice` | 命令写法过期，跑 `wyckoff <子命令> --help`，对照 agent-interface 第三节 |
 | `✗ 未知配置项: show` | 没有 `config show`，用 `wyckoff config` |
 | 登录报「邮箱或密码错误」，但确认密码没错 | 多半写成了 `auth login <email>`，`login` 被当成邮箱。改用 `wyckoff auth <email>` |
