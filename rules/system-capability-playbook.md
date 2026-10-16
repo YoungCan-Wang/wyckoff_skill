@@ -1,63 +1,70 @@
 # System Capability Playbook
 
-Use this file to force stable use of the full system capability set.
+把宿主模型的通用能力和 agent 工具串成一条稳定链路。核心原则：**agent 能给的数据和判定，宿主不自己造。**
 
-## Capability Routing Matrix
+## 能力路由矩阵
 
-1. Time capability
-- Trigger: Any request requiring "today/now/盘中/收盘后/明天" interpretation.
-- Action: Read system/tool current time, convert to `Asia/Shanghai`, then decide session state.
-- Fallback: If calendar ambiguity exists, query authoritative trading calendar before giving trade-time verdict.
+1. **Agent 工具能力（最高优先级）**
+   - 触发：任何涉及 A 股行情、诊断、持仓、信号、复盘、市场状态、筛选、回测、研报的请求。
+   - 动作：按 SKILL.md 的执行通道 A → B → C 选择；具体工具与参数见 `rules/agent-interface.md`。
+   - 并行：多只股票、或「大盘 + 持仓」这类彼此独立的查询，在同一轮里并行调用。
+   - 后台：`screen_stocks`、`run_backtest`、`run_funnel_simulation` 可能跑 3–10 分钟；告诉用户在跑，不要因为客户端超时就重发。
+   - 回退：工具报 `MISSING_DEPENDENCY` / `TOOL_FAILED` 时，先 `diagnose_backend()` 定位，再决定是否降到下一个通道。
 
-2. Online retrieval capability
-- Trigger: Symbol analysis, near-current context, or trading-day validation.
-- Action: Fetch OHLCV with source fallback from `rules/source-fallbacks.md`, then run completeness checks.
-- Fallback: Continue with remaining symbols and mark failed symbols as `data_unavailable`.
+2. **时间能力**
+   - 触发：任何「今天 / 现在 / 盘中 / 收盘后 / 明天」的解读。
+   - 动作：读系统时间转 Asia/Shanghai，判定连续竞价（09:30–11:30、13:00–15:00）与集合竞价时段。
+   - 回退：节假日 / 调休不确定时查权威交易日历，不凭感觉。
 
-3. Structured parsing capability
-- Trigger: User provides holdings/cash/candidate in free text.
-- Action: Parse into typed fields `{symbol, cost, qty, cash, candidate}` and infer scenario automatically.
-- Fallback: If one field is missing, continue with available fields and state missing assumptions explicitly.
+3. **市场闸门能力**
+   - 触发：任何可能产生新开仓、加仓、换入的结论。
+   - 动作：`market_regime()` → 按 `rules/decision-contract.md` 第 1 节映射权限。
+   - 回退：拿不到 regime 按 `UNKNOWN`（禁止新开）处理，并在输出里写明「市场闸门未能评估」。
 
-4. CSV processing capability
-- Trigger: CSV file exists.
-- Action: Parse dates/numeric columns, map into canonical OHLCV schema, reconcile with online window.
-- Fallback: If malformed CSV, explain parse issue and continue online path.
+4. **结构化解析能力**
+   - 触发：用户在自由文本里给出持仓 / 现金 / 候选。
+   - 动作：解析为 `{code, name, shares, cost, buy_dt, cash, candidate}`，自动推断场景；能读 agent 持仓时以 agent 为准。
+   - 回退：缺字段就用已有字段继续，并写明假设；写入持仓时缺 `buy_dt` 必须问，不猜。
 
-5. Image understanding capability
-- Trigger: K-line, intraday, or chart screenshot exists.
-- Action: Perform independent micro-structure interpretation and merge with structural conclusion.
-- Fallback: If unreadable image, state reason and continue with text/CSV/online inputs.
+5. **CSV 处理能力**
+   - 触发：用户上传 CSV。
+   - 动作：映射到 `date, open, high, low, close, volume`，与 agent 数据按日期核对，差异列出来。
+   - 回退：CSV 格式坏了就说明原因，继续用 agent 数据。
 
-6. Local compute + Python capability
-- Trigger: Need indicator computation, consistency checks, or chart rendering.
-- Action: Compute MA50/MA200 and structural diagnostics; render chart only when session rule allows.
-- Fallback: If environment blocks plotting, still provide full textual decision with explicit omission reason.
+6. **图片理解能力**
+   - 触发：K 线、分时或盘面截图。
+   - 动作：做当日微观结构的独立解读，按北京时间标注开盘、午休、收盘节点，再并入结构结论。
+   - 回退：图片确实无法解析时说明原因，继续文本 / CSV / agent 路径。
 
-7. Web/news validation capability
-- Trigger: Need explanation of abnormal event-date volume/price behavior.
-- Action: Search targeted event windows only for validation annotations.
-- Fallback: If unavailable, keep structural decision unchanged and note validation gap.
+7. **本地计算与绘图能力**
+   - 触发：需要指标核算、一致性检查或画图。
+   - 动作：在沙箱里计算 MA50 / MA200 等，绘图遵守 `rules/alpha-system-prompt.md` 的图表约束；连续竞价时段不画图。
+   - 回退：环境不能画图时，给完整文字结论并写明省略原因。
 
-## Multi-Input Priority
+8. **新闻校验能力**
+   - 触发：需要解释事件日的异常量价。
+   - 动作：只针对关键事件日、异常量价日、破位 / 突破日做定向搜索，只作标注。
+   - 回退：搜不到就保持结构结论不变，注明「未完成新闻校验」。
 
-Apply this precedence when evidence conflicts:
-1. Cleaned OHLCV structure (online + validated CSV)
-2. Session and calendar constraints (time rules)
-3. Image micro-structure clues
-4. Event-date news annotations
+9. **网页取数能力（通道 D）**
+   - 触发：agent 不可用，或标的是港股 / 美股单股。
+   - 动作：按 `rules/source-fallbacks.md` 抓取与校验。
+   - 约束：输出必须标 `source_used=web:<站点>`，并说明这份结论没有经过 agent 的数据层和市场闸门。
 
-Never allow layer 4 to override layers 1-3.
+## 证据冲突时的优先级
 
-8. CLI orchestration capability
-- Trigger: User wants to install, configure, manage portfolio, or query signals/recommendations.
-- Action: Run `wyckoff` CLI subcommands, parse output, present results to user.
-- Fallback: If CLI not installed, trigger full setup guide from `rules/cli-setup-guide.md`.
-- Routing: For operational intents (portfolio, signal, recommend, config), execute CLI directly without entering the analysis pipeline.
+1. agent 程序判定：市场闸门、硬止损、候选状态、程序字段（`health`、`track`、`candidate_*`）
+2. 经过校验的 OHLCV 结构（agent 数据 > 已核对的 CSV > 网页数据）
+3. 交易时段与 T+1 约束
+4. 图片微观结构
+5. 事件日新闻
 
-## Degrade Policy
+下层永远不能推翻上层。宿主模型的读盘解读和 agent 的程序字段不一致时，**两者都写出来**，以程序字段为准，并说明分歧点。
 
-- Never invent OHLCV rows, dates, events, or session status.
-- Never output immediate intraday execution if current time is not tradable session.
-- Keep output auditable even under partial failures: always include source/fallback table and missing-data notes.
-- Prefer "safe downgrade + explicit uncertainty" over confident speculation.
+## 降级策略
+
+- 不编造 OHLCV 行、日期、事件、交易状态、持仓或现金。
+- 非交易时段不给盘中立即执行指令。
+- 部分失败时输出仍要可审计：保留数据审计表和缺失说明。
+- 宁可「安全降级 + 明确不确定性」，也不要自信地猜。
+- 工具写操作被拒（`WRITE_DENIED`）或进了审批队列，如实告诉用户「尚未执行」，不要说成已完成，也不要自动重试。
